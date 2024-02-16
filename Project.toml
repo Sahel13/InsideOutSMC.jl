@@ -1,0 +1,42 @@
+name = "InsideOutSMC"
+uuid = "0c5ad5b7-9d27-41bc-9589-68a6b0d88cc9"
+authors = ["Sahel Iqbal <sahel13miqbal@proton.me> and Hany Abdulsamad <hany@robot-learning.de>"]
+version = "0.3.0"
+
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+Bijectors = "76274a88-744f-5084-9051-94815aaf08c4"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+ChangesOfVariables = "9e997f8a-9a97-42d5-a9f1-ce6bfc15e2c0"
+Cthulhu = "f68482b8-f384-11e8-15f7-abe071a5a75f"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+DistributionsAD = "ced4e74d-a319-5a8a-b0ac-84af2272839c"
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
+Functors = "d9f16b24-f501-4c13-a1f2-28368ffc5196"
+InverseFunctions = "3587e190-3f89-42d0-90ee-14403ec27112"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LogExpFunctions = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+ProfileCanvas = "efd6af41-a80b-495e-886c-e51b0c7d77a3"
+ProfileView = "c46f51b8-102a-5cf2-8d2c-8597cb0e0da7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+StatsFuns = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
+Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
+
+[compat]
+julia = "1"
+
+[extras]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test", "SafeTestsets", "LinearAlgebra", "Plots"]

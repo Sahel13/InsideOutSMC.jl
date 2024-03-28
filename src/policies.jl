@@ -252,76 +252,45 @@ function policy_logpdf(
 end
 
 
-struct RaoBlackwellStochasticPolicy{
-    T<:Function,
-    S<:Function
-}<:StochasticPolicy
-    feature_fn::T
-    mean_fn::S
-    log_std::Vector{Float64}
-    bijector::Bijectors.ComposedFunction
+struct PRBSStochasticPolicy <: StochasticPolicy
+    scale::Vector{Float64}
 end
 
 
-function rao_blackwell_policy_mean(
-    sp::RaoBlackwellStochasticPolicy,
-    q::Gaussian,
-    z::AbstractVector{Float64},
+function policy_sample(
+    sp::PRBSStochasticPolicy,
+    zs::AbstractMatrix{Float64}
 )
-    feat = sp.feature_fn(z)
-    params = vectorize(q)
-    input = vcat(feat, params)
-
-    u = sp.mean_fn(input)
-    return sp.bijector(u)
+    us = rand((-sp.scale, sp.scale), last(size(zs)))
+    return reduce(hcat, us)
 end
 
 
-function rao_blackwell_policy_sample(
-    sp::RaoBlackwellStochasticPolicy,
-    qs::AbstractVector{Gaussian},
-    zs::AbstractMatrix{Float64},
+function policy_mean(
+    sp::PRBSStochasticPolicy,
+    z::AbstractVector{Float64}
 )
-    feats = reduce(hcat, map(sp.feature_fn, eachcol(zs)))
-    params = reduce(hcat, map(vectorize, qs))
-    inputs = vcat(feats, params)
-
-    ms = sp.mean_fn(inputs)
-    std = @. exp(sp.log_std)
-
-    sample = m -> rand(
-        Bijectors.transformed(
-            Distributions.TuringDenseMvNormal(m, Diagonal(std.^2)),
-            sp.bijector
-        )
-    )
-    return reduce(hcat, map(sample, eachcol(ms)))
+    return rand((-sp.scale, sp.scale))
 end
 
 
-function rao_blackwell_policy_logpdf(
-    sp::RaoBlackwellStochasticPolicy,
-    qs::AbstractVector{Gaussian},
-    zs::AbstractMatrix{Float64},
-    us::AbstractMatrix{Float64},
+struct MaxActionPolicy <: StochasticPolicy
+    scale::Vector{Float64}
+end
+
+
+function policy_sample(
+    sp::MaxActionPolicy,
+    zs::AbstractMatrix{Float64}
 )
-    feats = reduce(hcat, map(sp.feature_fn, eachcol(zs)))
-    params = reduce(hcat, map(vectorize, qs))
-    inputs = vcat(feats, params)
-
-    ms = sp.mean_fn(inputs)
-    std = @. exp(sp.log_std)
-
-    lls = map(eachcol(us), eachcol(ms)) do u, m
-        Distributions.logpdf(
-            Bijectors.transformed(
-                Distributions.TuringDenseMvNormal(m, Diagonal(std.^2)),
-                sp.bijector
-            ),
-            u
-        )
-    end
-    return reduce(vcat, lls)
+    nb_samples = last(size(zs))
+    return repeat(sp.scale, outer=(1, nb_samples))
 end
 
-Flux.@functor RaoBlackwellStochasticPolicy
+
+function policy_mean(
+    sp::MaxActionPolicy,
+    z::AbstractVector{Float64}
+)
+    return sp.scale
+end

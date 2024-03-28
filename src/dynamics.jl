@@ -36,8 +36,7 @@ function dynamics_covar(
 )::Matrix{Float64}
     h = sd.step
     L = sd.diffusion_fn(args...)
-    reg = 1e-8 .* Matrix{Float64}(I, sd.xdim, sd.xdim)
-    return L * L' .* h + reg
+    return Diagonal(@. L^2 * h + 1e-8)
 end
 
 
@@ -108,8 +107,7 @@ function ibis_conditional_dynamics_covar(
 )::Matrix{Float64}
     h = id.step
     L = id.diffusion_fn(args...)
-    reg = 1e-8 .* Matrix{Float64}(I, id.xdim, id.xdim)
-    return L * L' .* h + reg
+    return Diagonal(@. L^2 * h + 1e-8)
 end
 
 
@@ -135,13 +133,13 @@ function ibis_conditional_dynamics_sample(
 )::Matrix{Float64}
     return reduce(hcat,
         map(
-            ibis_conditional_dynamics_sample(id, p, x, u),
             eachcol(ps),  # parameters
             eachcol(xs),  # state
             eachcol(us)   # action
-        )
+        ) do p, x, u
+            ibis_conditional_dynamics_sample(id, p, x, u)
+        end
     )
-    return xns
 end
 
 
@@ -256,14 +254,49 @@ function rao_blackwell_conditional_dynamics_mean(
 end
 
 
+function rao_blackwell_conditional_dynamics_mean!(
+    bd::RaoBlackwellDynamics,
+    p::AbstractVector{Float64},
+    x::AbstractVector{Float64},
+    u::AbstractVector{Float64},
+    xn::AbstractVector{Float64},
+)
+    feats = bd.feature_fn(x, u)
+
+    h = bd.step
+    A = [1.0 h; 0.0 1.0]
+    B = [0.0; h] .* feats'
+    xn .= A * x + B * p
+end
+
+
+function rao_blackwell_conditional_dynamics_mean!(
+    bd::RaoBlackwellDynamics,
+    ps::AbstractMatrix{Float64},
+    x::AbstractVector{Float64},
+    u::AbstractVector{Float64},
+    xns::AbstractMatrix{Float64},
+)
+    feats = bd.feature_fn(x, u)
+
+    h = bd.step
+    A = [1.0 h; 0.0 1.0]
+    B = [0.0; h] .* feats'
+
+    _, nb_samples = size(ps)
+    @inbounds @views for m in 1:nb_samples
+        xns[:, m] = A * x + B * ps[:, m]
+    end
+end
+
+
 function rao_blackwell_conditional_dynamics_covar(
     bd::RaoBlackwellDynamics,
     args::AbstractVector{Float64}...
 )::Matrix{Float64}
     h = bd.step
     L = bd.diffusion_fn(args...)
-    reg = 1e-8 .* Matrix{Float64}(I, bd.xdim, bd.xdim)
-    return L * L' .* h + reg
+    return Diagonal(@. L^2 * h + 1e-8)
 end
 
 
@@ -278,6 +311,89 @@ function rao_blackwell_conditional_dynamics_sample(
     return rand(
         Distributions.TuringDenseMvNormal(mean, covar)
     )
+end
+
+
+function rao_blackwell_conditional_dynamics_sample(
+    bd::RaoBlackwellDynamics,
+    ps::AbstractMatrix{Float64},
+    xs::AbstractMatrix{Float64},
+    us::AbstractMatrix{Float64},
+)::Matrix{Float64}
+    return reduce(hcat,
+        map(
+            eachcol(ps),  # parameters
+            eachcol(xs),  # state
+            eachcol(us)   # action
+        ) do p, x, u
+            rao_blackwell_conditional_dynamics_sample(bd, p, x, u)
+        end
+    )
+end
+
+
+function rao_blackwell_conditional_dynamics_sample!(
+    bd::RaoBlackwellDynamics,
+    p::AbstractVector{Float64},
+    x::AbstractVector{Float64},
+    u::AbstractVector{Float64},
+    xn::AbstractVector{Float64}
+)
+    covar = rao_blackwell_conditional_dynamics_covar(bd)
+    dist = Distributions.TuringDenseMvNormal(zeros(bd.xdim), covar)
+    rao_blackwell_conditional_dynamics_mean!(bd, p, x, u, xn)
+    xn .= xn + rand(dist)
+end
+
+
+function rao_blackwell_conditional_dynamics_sample!(
+    bd::RaoBlackwellDynamics,
+    ps::AbstractMatrix{Float64},
+    xs::AbstractMatrix{Float64},
+    us::AbstractMatrix{Float64},
+    xns::AbstractMatrix{Float64}
+)
+    covar = rao_blackwell_conditional_dynamics_covar(bd)
+    dist = Distributions.TuringDenseMvNormal(zeros(bd.xdim), covar)
+    map(
+        eachcol(ps),   # parameter
+        eachcol(xs),   # state
+        eachcol(us),   # action
+        eachcol(xns)   # next state
+    ) do p, x, u, xn
+        rao_blackwell_conditional_dynamics_mean!(bd, p, x, u, xn)
+        xn .= xn + rand(dist)
+    end
+end
+
+
+function rao_blackwell_conditional_dynamics_logpdf(
+    bd::RaoBlackwellDynamics,
+    p::AbstractVector{Float64},
+    x::AbstractVector{Float64},
+    u::AbstractVector{Float64},
+    xn::AbstractVector{Float64},
+)
+    mean = rao_blackwell_conditional_dynamics_mean(bd, p, x, u)
+    covar = rao_blackwell_conditional_dynamics_covar(bd)
+    return Distributions.logpdf(
+        Distributions.TuringDenseMvNormal(mean, covar), xn
+    )
+end
+
+
+function rao_blackwell_conditional_dynamics_logpdf(
+    bd::RaoBlackwellDynamics,
+    ps::AbstractMatrix{Float64},
+    x::AbstractVector{Float64},
+    u::AbstractVector{Float64},
+    xn::AbstractVector{Float64},
+    sc::AbstractMatrix{Float64}
+)
+    covar = rao_blackwell_conditional_dynamics_covar(bd)
+    dist = Distributions.TuringDenseMvNormal(zeros(bd.xdim), covar)
+    rao_blackwell_conditional_dynamics_mean!(bd, ps, x, u, sc)
+    return Distributions.logpdf(dist, sc .- xn)
 end
 
 

@@ -1,7 +1,7 @@
 name = "InsideOutSMC2"
 uuid = "0c5ad5b7-9d27-41bc-9589-68a6b0d88cc9"
 authors = ["Sahel Iqbal <sahel13miqbal@proton.me> and Hany Abdulsamad <hany@robot-learning.de>"]
-version = "0.5.0"
+version = "1.0.0"
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"

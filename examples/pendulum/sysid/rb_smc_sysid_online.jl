@@ -7,6 +7,9 @@ using Distributions
 using LinearAlgebra
 using Statistics
 
+import Flux
+import Bijectors
+
 include("environment.jl")
 
 using .PendulumEnvironment: xdim, udim
@@ -52,7 +55,7 @@ ctl_mean_fn = Flux.f64(
     ),
 )
 
-ctl_log_std = @. log(sqrt([0.5]))
+ctl_log_std = @. log(sqrt([1.0]))
 
 ctl_bijector = (
     Bijectors.Shift(ctl_shift)
@@ -73,12 +76,12 @@ learner = RaoBlackwellClosedLoop(
 )
 
 horizon = 25
-nb_steps = 50
-nb_trajectories = 512
+nb_steps = 25
+nb_trajectories = 256
 
 action_penalty = 1e-3
-slew_rate_penalty = 0.0
-tempering = 0.5
+slew_rate_penalty = 0.1
+tempering = 0.25
 
 Random.seed!(1)
 
@@ -113,9 +116,11 @@ for t in 1:nb_steps
 end
 prior_mvn = MvNormal(param_prior.mean, Symmetric(param_prior.covar))
 posterior_mvn = MvNormal(param_posterior.mean, Symmetric(param_posterior.covar))
-@printf("EIG with unconditioned actions: %0.4f\n", entropy(prior_mvn) - entropy(posterior_mvn))
+@printf("IG with unconditioned actions: %0.4f\n", entropy(prior_mvn) - entropy(posterior_mvn))
 
 # Conditioned policy
+Random.seed!(123)
+
 trajectory = Array{Float64}(undef, xdim+udim, nb_steps + 1)
 trajectory[:, 1] = init_state
 
@@ -131,7 +136,7 @@ for t in 1:nb_steps
     local mvn
 
     state_struct, _ = smc_with_rao_blackwell_marginal_dynamics(
-        min(horizon, (nb_steps + 1) - t),
+        min(nb_steps, (nb_steps + 1) - t),
         nb_trajectories,
         trajectory[:, t],
         learner,
@@ -160,4 +165,4 @@ for t in 1:nb_steps
 end
 prior_mvn = MvNormal(param_prior.mean, Symmetric(param_prior.covar))
 posterior_mvn = MvNormal(param_posterior.mean, Symmetric(param_posterior.covar))
-@printf("EIG with conditioned actions: %0.4f\n", entropy(prior_mvn) - entropy(posterior_mvn))
+@printf("IG with conditioned actions: %0.4f\n", entropy(prior_mvn) - entropy(posterior_mvn))

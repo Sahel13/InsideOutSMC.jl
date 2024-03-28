@@ -4,7 +4,7 @@ using Distributions
 
 function batch_ibis!(
     trajectories::AbstractArray{Float64,3},
-    closedloop::IBISClosedLoop,
+    dynamics::IBISDynamics,
     param_prior::MultivariateDistribution,
     param_proposal::T,
     nb_moves::Int,
@@ -15,7 +15,7 @@ function batch_ibis!(
     for traj_idx = 1:nb_trajectories
         ibis!(
             view(trajectories, :, :, traj_idx),
-            closedloop,
+            dynamics,
             param_prior,
             param_proposal,
             nb_moves,
@@ -27,7 +27,7 @@ end
 
 function ibis!(
     trajectory::AbstractMatrix{Float64},
-    closedloop::IBISClosedLoop,
+    dynamics::IBISDynamics,
     param_prior::MultivariateDistribution,
     param_proposal::T,
     nb_moves::Int,
@@ -41,7 +41,7 @@ function ibis!(
         ibis_step!(
             time_idx,
             trajectory,
-            closedloop,
+            dynamics,
             param_prior,
             param_proposal,
             nb_moves,
@@ -54,7 +54,7 @@ end
 function batch_ibis_step!(
     time_idx::Int,
     trajectories::AbstractArray{Float64,3},
-    closedloop::IBISClosedLoop,
+    dynamics::IBISDynamics,
     param_prior::MultivariateDistribution,
     param_proposal::T,
     nb_moves::Int,
@@ -66,7 +66,7 @@ function batch_ibis_step!(
         ibis_step!(
             time_idx,
             view(trajectories, :, :, traj_idx),
-            closedloop,
+            dynamics,
             param_prior,
             param_proposal,
             nb_moves,
@@ -79,7 +79,7 @@ end
 function ibis_step!(
     time_idx::Int,
     trajectory::AbstractMatrix{Float64},
-    closedloop::IBISClosedLoop,
+    dynamics::IBISDynamics,
     param_prior::MultivariateDistribution,
     param_proposal::T,
     nb_moves::Int,
@@ -90,7 +90,7 @@ function ibis_step!(
     reweight_params!(
         time_idx,
         trajectory,
-        closedloop,
+        dynamics,
         param_struct,
     )
 
@@ -104,7 +104,7 @@ function ibis_step!(
         move!(
             time_idx,
             trajectory,
-            closedloop,
+            dynamics,
             param_prior,
             param_proposal,
             nb_moves,
@@ -117,14 +117,14 @@ end
 function reweight_params!(
     time_idx::Int,
     trajectory::AbstractMatrix{Float64},
-    closedloop::IBISClosedLoop,
+    dynamics::IBISDynamics,
     param_struct::IBISParamStruct,
 )
-    xdim = closedloop.dyn.xdim
+    xdim = dynamics.xdim
 
     # Get the log weight increments
     log_weight_increments = ibis_conditional_dynamics_logpdf(
-        closedloop.dyn,
+        dynamics,
         param_struct.particles[:, time_idx, :],
         trajectory[begin:xdim, time_idx],  # state
         trajectory[xdim+1:end, time_idx+1],    # action
@@ -163,7 +163,7 @@ end
 function move!(
     time_idx::Int,
     trajectory::AbstractMatrix{Float64},
-    closedloop::IBISClosedLoop,
+    dynamics::IBISDynamics,
     param_prior::MultivariateDistribution,
     param_proposal::T,
     nb_moves::Int,
@@ -173,7 +173,7 @@ function move!(
         kernel!(
             time_idx,
             trajectory,
-            closedloop,
+            dynamics,
             param_prior,
             param_proposal,
             param_struct,
@@ -185,7 +185,7 @@ end
 function kernel!(
     time_idx::Int,
     trajectory::AbstractMatrix{Float64},
-    closedloop::IBISClosedLoop,
+    dynamics::IBISDynamics,
     param_prior::MultivariateDistribution,
     param_proposal::T,
     param_struct::IBISParamStruct,
@@ -193,7 +193,8 @@ function kernel!(
 
     history = @view trajectory[:, 1:time_idx+1]
     particles = @view param_struct.particles[:, time_idx+1, :]
-    prop_particles = param_proposal(particles)
+    weights = @view param_struct.weights[time_idx+1, :]
+    prop_particles = param_proposal(particles, weights)
 
     # populate uniforms
     rand!(param_struct.rvs)
@@ -201,7 +202,7 @@ function kernel!(
     prop_log_likelihood = accumulate_likelihood(
         history,
         prop_particles,
-        closedloop,
+        dynamics,
         param_prior,
         param_struct.scratch
     )
@@ -222,18 +223,18 @@ end
 function accumulate_likelihood(
     history::AbstractMatrix{Float64},
     particles::AbstractMatrix{Float64},
-    closedloop::IBISClosedLoop,
+    dynamics::IBISDynamics,
     param_prior::MultivariateDistribution,
     scratch::AbstractMatrix{Float64},
 )
     lls = logpdf(param_prior, particles)
 
-    xdim = closedloop.dyn.xdim
+    xdim = dynamics.xdim
     _, nb_steps_p_1 = size(history)
 
     @views @inbounds for t in 1:nb_steps_p_1 - 1
         lls += ibis_conditional_dynamics_logpdf(
-            closedloop.dyn,
+            dynamics,
             particles,
             history[begin:xdim, t],    # state
             history[xdim+1:end, t+1],  # action

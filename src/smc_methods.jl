@@ -573,3 +573,60 @@ function ancestor_sampling_csmc_step_with_rao_blackwell_marginal_dynamics!(
     # Normalize the weights
     normalize_weights!(state_struct)
 end
+
+
+function myopic_smc_step_with_ibis_marginal_dynamics!(
+    time_idx::Int,
+    adaptive_loop::IBISAdaptiveLoop,
+    state_struct::StateStruct,
+    param_struct::IBISParamStruct
+)
+    # Propagate
+    state_struct.trajectories[:, time_idx+1, :] = ibis_marginal_adaptive_loop_sample(
+        adaptive_loop,
+        view(param_struct.particles, :, time_idx, :, :),
+        view(param_struct.weights, time_idx, :, :),
+        view(param_struct.log_weights, time_idx, :, :),
+        view(state_struct.trajectories, :, time_idx, :)
+    )
+
+    # Weights
+    @views @inbounds for n = 1:state_struct.nb_trajectories
+        info_gain = ibis_info_gain_increment(
+            adaptive_loop.dyn,
+            param_struct.particles[:, time_idx, :, n],
+            param_struct.log_weights[time_idx, :, n],
+            state_struct.trajectories[1:adaptive_loop.dyn.xdim, time_idx, n],
+            state_struct.trajectories[adaptive_loop.dyn.xdim+1:end, time_idx+1, n],
+            state_struct.trajectories[1:adaptive_loop.dyn.xdim, time_idx+1, n],
+            param_struct.scratch[:, :, n]
+        )
+        state_struct.cumulative_return[n] += info_gain
+    end
+end
+
+
+function myopic_smc_step_with_rao_blackwell_marginal_dynamics!(
+    time_idx::Int,
+    adaptive_loop::RaoBlackwellAdaptiveLoop,
+    state_struct::StateStruct,
+    param_struct::RaoBlackwellParamStruct
+)
+    # Propagate
+    state_struct.trajectories[:, time_idx+1, :] = rao_blackwell_marginal_adaptive_loop_sample(
+        adaptive_loop,
+        param_struct.distributions[time_idx, :],
+        state_struct.trajectories[:, time_idx, :]
+    )
+
+    # Weights
+    @views @inbounds for n = 1:state_struct.nb_trajectories
+        q = param_struct.distributions[time_idx, n]
+        x = state_struct.trajectories[1:adaptive_loop.dyn.xdim, time_idx, n]
+        u = state_struct.trajectories[adaptive_loop.dyn.xdim+1:end, time_idx+1, n]
+        xn = state_struct.trajectories[1:adaptive_loop.dyn.xdim, time_idx+1, n]
+
+        info_gain = rao_blackwell_info_gain_increment(adaptive_loop.dyn, q, x, u, xn)
+        state_struct.cumulative_return[n] += info_gain
+    end
+end

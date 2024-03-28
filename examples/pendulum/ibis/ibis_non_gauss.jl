@@ -1,8 +1,12 @@
+using Base.Threads: nthreads, @threads, @spawn
+using Base.Iterators: partition
+
+using InsideOutSMC
+
 using Random
 using Distributions
 using LinearAlgebra
-
-using InsideOutSMC
+using StatsBase
 
 using Plots
 
@@ -43,7 +47,7 @@ function diffusion_fn(
 end
 
 
-random_policy = UniformStochasticPolicy([2.5])
+rnd_policy = UniformStochasticPolicy([2.5])
 
 ibis_dynamics = IBISDynamics(
     xdim, udim,
@@ -54,7 +58,7 @@ ibis_dynamics = IBISDynamics(
 
 ibis_loop = IBISClosedLoop(
     ibis_dynamics,
-    random_policy
+    rnd_policy
 )
 
 nb_steps = 50
@@ -63,7 +67,7 @@ nb_trajectories = 100
 trajectories = Array{Float64}(undef, xdim+udim, nb_steps+1, nb_trajectories)
 trajectories[:, 1, :] .= init_state
 
-for t = 1:nb_steps
+@inbounds @views for t = 1:nb_steps
     ibis_conditional_closedloop_sample!(
         ibis_loop,
         repeat(true_params, 1, nb_trajectories),
@@ -76,12 +80,28 @@ end
 
 function param_proposal(
     particles::AbstractMatrix{Float64},
+    weights::AbstractVector{Float64},
     prop_stddev::Float64=0.1,
 )::Matrix{Float64}
     log_particles = log.(particles)
     log_particles .+= prop_stddev .* randn(size(log_particles))
     return exp.(log_particles)
 end
+
+
+# function param_proposal(
+#     particles::AbstractMatrix{Float64},
+#     weights::AbstractVector{Float64},
+#     constant::Float64=10.0
+# )::Matrix{Float64}
+#     log_particles = log.(particles)
+#     covar = cov(Matrix(log_particles), AnalyticWeights(weights), 2)
+#     eig_vals, eig_vecs = eigen(covar)
+#     sqrt_eig_vals = @. sqrt(max(eig_vals, 1e-8))
+#     sqrt_covar = eig_vecs * Diagonal(sqrt_eig_vals)
+#     log_particles .+= constant .* sqrt_covar * randn(size(log_particles))
+#     return exp.(log_particles)
+# end
 
 
 nb_particles = 512
@@ -113,7 +133,7 @@ param_struct_views = [view_struct(param_struct, range) for range in ranges]
         @spawn begin
             batch_ibis!(
                 traj_chunk,
-                ibis_loop,
+                ibis_loop.dyn,
                 param_prior,
                 param_proposal,
                 nb_moves,
@@ -126,7 +146,7 @@ end
 
 # @time batch_ibis!(
 #     trajectories,
-#     ibis_loop,
+#     ibis_loop.dyn,
 #     param_prior,
 #     param_proposal,
 #     nb_moves,
@@ -137,7 +157,7 @@ num_tests_passed = 0
 for n = 1:nb_trajectories
     params = @view param_struct.particles[:, end, :, n]
     param_weights = @view param_struct.weights[end, :, n]
-    ibis_mean = sum(repeat(param_weights, 1, 2)' .* params, dims=2)
+    ibis_mean = sum(repeat(param_weights, 1, pdim)' .* params, dims=2)
     if norm(ibis_mean - true_params)^2 < 0.1
         global num_tests_passed += 1
     end

@@ -92,7 +92,7 @@ function smc_with_ibis_marginal_dynamics(
                 batch_ibis_step!(
                     time_idx,
                     traj_view,
-                    closedloop,
+                    closedloop.dyn,
                     param_prior,
                     param_proposal,
                     nb_ibis_moves,
@@ -160,7 +160,7 @@ function csmc_with_ibis_marginal_dynamics(
                 batch_ibis_step!(
                     time_idx,
                     traj_view,
-                    closedloop,
+                    closedloop.dyn,
                     param_prior,
                     param_proposal,
                     nb_ibis_moves,
@@ -290,6 +290,87 @@ function ancestor_sampling_csmc_with_rao_blackwell_magrinal_dynamics(
 
             # Update the posterior
             rao_blackwell_dynamics_update!(closedloop.dyn, q, x, u, xn, qn)
+        end
+    end
+    return state_struct, param_struct
+end
+
+
+function myopic_smc_with_ibis_marginal_dynamics(
+    nb_steps::Int,
+    nb_trajectories::Int,
+    nb_particles::Int,
+    init_state::Vector{Float64},
+    adaptive_loop::IBISAdaptiveLoop,
+    param_prior::MultivariateDistribution,
+    param_proposal::T,
+    nb_ibis_moves::Int,
+    nb_threads::Int = 10,
+) where {T<:Function}
+
+    scratch = Array{Float64}(undef, adaptive_loop.dyn.xdim, nb_particles, nb_trajectories)
+    state_struct = StateStruct(init_state, nb_steps, nb_trajectories)
+    param_struct = IBISParamStruct(param_prior, nb_steps, nb_particles, nb_trajectories, scratch)
+
+    chunk_size = round(Int, nb_trajectories / nb_threads)
+    ranges = partition(1:nb_trajectories, chunk_size)
+
+    trajectory_views = [view(state_struct.trajectories, :, :, range) for range in ranges]
+    param_struct_views = [view_struct(param_struct, range) for range in ranges]
+
+    for time_idx in 1:nb_steps
+        myopic_smc_step_with_ibis_marginal_dynamics!(
+            time_idx,
+            adaptive_loop,
+            state_struct,
+            param_struct,
+        )
+
+        tasks = map(zip(trajectory_views, param_struct_views)) do (traj_view, struct_view)
+            @spawn begin
+                batch_ibis_step!(
+                    time_idx,
+                    traj_view,
+                    adaptive_loop.dyn,
+                    param_prior,
+                    param_proposal,
+                    nb_ibis_moves,
+                    struct_view
+                );
+            end
+        end
+        fetch.(tasks);
+    end
+    return state_struct, param_struct
+end
+
+
+function myopic_smc_with_rao_blackwell_marginal_dynamics(
+    nb_steps::Int,
+    nb_trajectories::Int,
+    init_state::Vector{Float64},
+    adaptive_loop::RaoBlackwellAdaptiveLoop,
+    param_prior::Gaussian,
+)
+    state_struct = StateStruct(init_state, nb_steps, nb_trajectories)
+    param_struct = RaoBlackwellParamStruct(param_prior, nb_steps, nb_trajectories)
+
+    for time_idx = 1:nb_steps
+        myopic_smc_step_with_rao_blackwell_marginal_dynamics!(
+            time_idx,
+            adaptive_loop,
+            state_struct,
+            param_struct,
+        )
+
+        @views @inbounds for n = 1:state_struct.nb_trajectories
+            q = param_struct.distributions[time_idx, n]
+            x = state_struct.trajectories[1:adaptive_loop.dyn.xdim, time_idx, n]
+            u = state_struct.trajectories[adaptive_loop.dyn.xdim+1:end, time_idx+1, n]
+            xn = state_struct.trajectories[1:adaptive_loop.dyn.xdim, time_idx+1, n]
+            qn = param_struct.distributions[time_idx+1, n]
+
+            rao_blackwell_dynamics_update!(adaptive_loop.dyn, q, x, u, xn, qn)
         end
     end
     return state_struct, param_struct

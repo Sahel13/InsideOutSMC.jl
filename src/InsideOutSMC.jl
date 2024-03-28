@@ -4,6 +4,7 @@ include("structures.jl")
 include("dynamics.jl")
 include("policies.jl")
 include("closedloops.jl")
+include("adaptive.jl")
 include("bijector.jl")
 include("utils.jl")
 
@@ -56,6 +57,8 @@ export RaoBlackwellDynamics
 export rao_blackwell_conditional_dynamics_mean
 export rao_blackwell_conditional_dynamics_covar
 export rao_blackwell_conditional_dynamics_sample
+export rao_blackwell_conditional_dynamics_sample!
+export rao_blackwell_conditional_dynamics_logpdf
 
 export rao_blackwell_marginal_dynamics_mean
 export rao_blackwell_marginal_dynamics_covar
@@ -70,17 +73,15 @@ export StatefulStochasticPolicy
 export StatefulHomoschedasticPolicy
 export StatefulHeteroschedasticPolicy
 export UniformStochasticPolicy
+export MaxActionPolicy
+export PRBSStochasticPolicy
+export MyopicAdaptiveIBISPolicy
+export MyopicAdaptiveRaoBlackwellPolicy
 
 export policy_mean
 export policy_sample
 export policy_logpdf
 export policy_entropy
-
-export RaoBlackwellStochasticPolicy
-
-export rao_blackwell_policy_mean
-export rao_blackwell_policy_sample
-export rao_blackwell_policy_logpdf
 
 export ClosedLoop
 
@@ -104,6 +105,12 @@ export rao_blackwell_marginal_closedloop_sample
 export rao_blackwell_marginal_closedloop_logpdf
 export rao_blackwell_marginal_closedloop_sample_and_logpdf
 
+export IBISAdaptiveLoop
+export RaoBlackwellAdaptiveLoop
+
+export ibis_marginal_adaptive_loop_sample
+export rao_blackwell_marginal_adaptive_loop_sample
+
 export ibis_step!, ibis!
 export batch_ibis_step!, batch_ibis!
 export smc_step!, smc
@@ -121,6 +128,12 @@ export csmc_with_ibis_marginal_dynamics
 export smc_with_rao_blackwell_marginal_dynamics
 export csmc_with_rao_blackwell_marginal_dynamics
 
+export myopic_smc_step_with_ibis_marginal_dynamics!
+export myopic_smc_with_ibis_marginal_dynamics
+
+export myopic_smc_step_with_rao_blackwell_marginal_dynamics!
+export myopic_smc_with_rao_blackwell_marginal_dynamics
+
 export policy_gradient_objective
 export maximization!
 
@@ -132,5 +145,8 @@ export markovian_score_climbing_with_ibis_marginal_dynamics
 
 export score_climbing_with_rao_blackwell_marginal_dynamics
 export markovian_score_climbing_with_rao_blackwell_marginal_dynamics
+
+export compute_sPCE
+export compute_sPCE_for_myopic_adaptive_policy
 
 end

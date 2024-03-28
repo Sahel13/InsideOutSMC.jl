@@ -59,10 +59,10 @@ ctl_encoder_fn = Flux.f64(
         Flux.Dense(input_dim, dense_size, Flux.relu),
         Flux.Dense(dense_size, dense_size, Flux.relu),
         Flux.Dense(dense_size, recur_size),
-        Flux.LSTM(recur_size, recur_size),
-        Flux.LSTM(recur_size, recur_size),
-        # Flux.GRU(recur_size, recur_size),
-        # Flux.GRU(recur_size, recur_size),
+        # Flux.LSTM(recur_size, recur_size),
+        # Flux.LSTM(recur_size, recur_size),
+        Flux.GRU(recur_size, recur_size),
+        Flux.GRU(recur_size, recur_size),
     ),
 )
 

@@ -147,7 +147,7 @@ function ibis_marginal_closedloop_sample!(
         resampled_ps[:, n] = ps[:, idx, n]
     end
 
-    return ibis_conditional_closedloop_sample!(cl, resampled_ps, zs, zns)
+    ibis_conditional_closedloop_sample!(cl, resampled_ps, zs, zns)
 end
 
 

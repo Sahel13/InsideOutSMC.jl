@@ -1,11 +1,12 @@
 using Base.Threads: nthreads, @threads, @spawn
 using Base.Iterators: partition
 
+using InsideOutSMC
+
 using Random
 using Distributions
 using LinearAlgebra
-
-using InsideOutSMC
+using StatsBase
 
 using Plots
 
@@ -61,7 +62,7 @@ function diffusion_fn(
 end
 
 
-random_policy = UniformStochasticPolicy([2.5])
+rnd_policy = UniformStochasticPolicy([2.5])
 
 ibis_dynamics = IBISDynamics(
     xdim, udim,
@@ -79,7 +80,7 @@ rb_dynamics = RaoBlackwellDynamics(
 
 ibis_loop = IBISClosedLoop(
     ibis_dynamics,
-    random_policy
+    rnd_policy
 )
 
 nb_steps = 50
@@ -120,10 +121,24 @@ end
 
 function param_proposal(
     particles::AbstractMatrix{Float64},
+    weights::AbstractVector{Float64},
     prop_stddev::Float64=0.1
 )::Matrix{Float64}
     return particles .+ prop_stddev .* randn(size(particles))
 end
+
+
+# function param_proposal(
+#     particles::AbstractMatrix{Float64},
+#     weights::AbstractVector{Float64},
+#     constant::Float64=10.0
+# )::Matrix{Float64}
+#     covar = cov(Matrix(particles), AnalyticWeights(weights), 2)
+#     eig_vals, eig_vecs = eigen(covar)
+#     sqrt_eig_vals = @. sqrt(max(eig_vals, 1e-8))
+#     sqrt_covar = eig_vecs * Diagonal(sqrt_eig_vals)
+#     return particles + constant .* sqrt_covar * randn(size(particles))
+# end
 
 
 nb_particles = 512
@@ -153,7 +168,7 @@ param_struct_views = [view_struct(param_struct, range) for range in ranges]
         @spawn begin
             batch_ibis!(
                 traj_chunk,
-                ibis_loop,
+                ibis_loop.dyn,
                 param_prior,
                 param_proposal,
                 nb_moves,
@@ -166,7 +181,7 @@ end
 
 # @time batch_ibis!(
 #     trajectories,
-#     ibis_loop,
+#     ibis_loop.dyn,
 #     param_prior,
 #     param_proposal,
 #     nb_moves,

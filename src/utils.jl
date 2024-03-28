@@ -1,3 +1,6 @@
+using Base.Threads: nthreads, @threads, @spawn
+using Base.Iterators: partition
+
 using Random
 using Distributions
 using LinearAlgebra
@@ -5,6 +8,246 @@ using LogExpFunctions
 
 import Zygote
 import Flux
+
+
+function compute_sPCE_for_myopic_adaptive_policy(
+    adaptive_loop::RaoBlackwellAdaptiveLoop,
+    param_prior::Gaussian,
+    init_state::Vector{Float64},
+    nb_steps::Int,
+    nb_outer_samples::Int,
+    nb_inner_samples::Int,
+)
+    xdim = adaptive_loop.dyn.xdim
+    udim = adaptive_loop.dyn.udim
+
+    _param_prior = MvNormal(param_prior.mean, param_prior.covar)
+
+    # Generate outer and inner samples
+    outer_param_samples = rand(_param_prior, nb_outer_samples)
+    inner_param_samples = rand(_param_prior, nb_inner_samples, nb_outer_samples)
+
+    # Generate trajectories
+    trajectory_samples = Array{Float64,3}(undef, xdim+udim, nb_steps + 1, nb_outer_samples)
+    trajectory_samples[:, 1, :] .= init_state
+
+    # Param struct
+    param_struct = RaoBlackwellParamStruct(param_prior, nb_steps, nb_outer_samples)
+
+    @inbounds @views for t = 1:nb_steps
+        # sample from adaptive policy
+        trajectory_samples[xdim+1:xdim+udim, t+1, :] = adaptive_policy_sample(
+            adaptive_loop.ctl,
+            param_struct.distributions[t, :],
+            trajectory_samples[:, t, :]
+        )
+
+        # sample from conditional dynamics
+        rao_blackwell_conditional_dynamics_sample!(
+            adaptive_loop.dyn,
+            outer_param_samples,
+            view(trajectory_samples, 1:xdim, t, :),              # state
+            view(trajectory_samples, xdim+1:xdim+udim, t+1, :),  # action
+            view(trajectory_samples, 1:xdim, t+1, :)             # next state
+        )
+
+        # closed-form param update
+        @views @inbounds for n = 1:nb_outer_samples
+            q = param_struct.distributions[t, n]
+            x = trajectory_samples[1:xdim, t, n]
+            u = trajectory_samples[xdim+1:end, t+1, n]
+            xn = trajectory_samples[1:xdim, t+1, n]
+            qn = param_struct.distributions[t+1, n]
+
+            rao_blackwell_dynamics_update!(adaptive_loop.dyn, q, x, u, xn, qn)
+        end
+    end
+
+    # Compute the denominator of the integrand
+    scratch_matrix = zeros(xdim, nb_inner_samples + 1)
+    trajectory_logpdf = zeros(nb_inner_samples + 1, nb_outer_samples)
+    integrand = Vector{Float64}(undef, nb_outer_samples)
+
+    for n in 1:nb_outer_samples
+        regularizing_samples = hcat(
+            outer_param_samples[:, n],
+            reduce(hcat, inner_param_samples[:, n])
+        )
+        for t = 1:nb_steps
+            trajectory_logpdf[:, n] += rao_blackwell_conditional_dynamics_logpdf(
+                adaptive_loop.dyn,
+                regularizing_samples,
+                trajectory_samples[1:xdim, t, n],        # state
+                trajectory_samples[xdim+1:end, t+1, n],  # action
+                trajectory_samples[1:xdim, t+1, n],      # next state
+                scratch_matrix
+            )
+        end
+        integrand[n] = (
+            trajectory_logpdf[1, n]
+            - logsumexp(trajectory_logpdf[:, n])
+            + log(nb_inner_samples + 1)
+        )
+    end
+    return mean(integrand)
+end
+
+
+function compute_sPCE_for_myopic_adaptive_policy(
+    adaptive_loop::IBISAdaptiveLoop,
+    param_prior::MultivariateDistribution,
+    init_state::Vector{Float64},
+    nb_steps::Int,
+    nb_outer_samples::Int,
+    nb_inner_samples::Int,
+    nb_ibis_particles::Int,
+    ibis_proposal::Function,
+    nb_ibis_moves::Int,
+    nb_ibis_threads::Int = 2,
+)
+    xdim = adaptive_loop.dyn.xdim
+    udim = adaptive_loop.dyn.udim
+
+    # Generate outer and inner samples
+    outer_param_samples = rand(param_prior, nb_outer_samples)
+    inner_param_samples = rand(param_prior, nb_inner_samples, nb_outer_samples)
+
+    # Generate trajectories
+    trajectory_samples = Array{Float64,3}(undef, xdim+udim, nb_steps + 1, nb_outer_samples)
+    trajectory_samples[:, 1, :] .= init_state
+
+    # IBIS related objects
+    ibis_scratch = Array{Float64}(undef, xdim, nb_ibis_particles, nb_outer_samples)
+    ibis_struct = IBISParamStruct(param_prior, nb_steps, nb_ibis_particles, nb_outer_samples, ibis_scratch)
+
+    chunk_size = round(Int, nb_outer_samples / nb_ibis_threads)
+    ranges = partition(1:nb_outer_samples, chunk_size)
+
+    trajectory_views = [view(trajectory_samples, :, :, range) for range in ranges]
+    ibis_struct_views = [view_struct(ibis_struct, range) for range in ranges]
+
+    @inbounds @views for t = 1:nb_steps
+        # sample from adaptive policy
+        trajectory_samples[xdim+1:xdim+udim, t+1, :] = adaptive_policy_sample(
+            adaptive_loop.ctl,
+            view(ibis_struct.particles, :, t, :, :),
+            view(ibis_struct.weights, t, :, :),
+            view(ibis_struct.log_weights, t, :, :),
+            view(trajectory_samples, :, t, :)
+        )
+
+        # sample from conditional dynamics
+        ibis_conditional_dynamics_sample!(
+            adaptive_loop.dyn,
+            outer_param_samples,
+            view(trajectory_samples, 1:xdim, t, :),              # state
+            view(trajectory_samples, xdim+1:xdim+udim, t+1, :),  # action
+            view(trajectory_samples, 1:xdim, t+1, :)             # next state
+        )
+
+        # run IBIS outside
+        tasks = map(zip(trajectory_views, ibis_struct_views)) do (traj_view, struct_view)
+            @spawn begin
+                batch_ibis_step!(
+                    t,
+                    traj_view,
+                    adaptive_loop.dyn,
+                    param_prior,
+                    ibis_proposal,
+                    nb_ibis_moves,
+                    struct_view
+                );
+            end
+        end
+        fetch.(tasks);
+    end
+
+    # Compute the denominator of the integrand
+    scratch_matrix = zeros(xdim, nb_inner_samples + 1)
+    trajectory_logpdf = zeros(nb_inner_samples + 1, nb_outer_samples)
+    integrand = Vector{Float64}(undef, nb_outer_samples)
+
+    for n in 1:nb_outer_samples
+        regularizing_samples = hcat(
+            outer_param_samples[:, n],
+            reduce(hcat, inner_param_samples[:, n])
+        )
+        for t = 1:nb_steps
+            trajectory_logpdf[:, n] += ibis_conditional_dynamics_logpdf(
+                adaptive_loop.dyn,
+                regularizing_samples,
+                trajectory_samples[1:xdim, t, n],        # state
+                trajectory_samples[xdim+1:end, t+1, n],  # action
+                trajectory_samples[1:xdim, t+1, n],      # next state
+                scratch_matrix
+            )
+        end
+        integrand[n] = (
+            trajectory_logpdf[1, n]
+            - logsumexp(trajectory_logpdf[:, n])
+            + log(nb_inner_samples + 1)
+        )
+    end
+    return mean(integrand)
+end
+
+
+function compute_sPCE(
+    closedloop::IBISClosedLoop,
+    param_prior::MultivariateDistribution,
+    init_state::Vector{Float64},
+    nb_steps::Int,
+    nb_outer_samples::Int,
+    nb_inner_samples::Int,
+)
+    xdim = closedloop.dyn.xdim
+    udim = closedloop.dyn.udim
+
+    # Generate outer and inner samples
+    outer_param_samples = rand(param_prior, nb_outer_samples)
+    inner_param_samples = rand(param_prior, nb_inner_samples, nb_outer_samples)
+
+    # Generate trajectories
+    trajectory_samples = Array{Float64,3}(undef, xdim+udim, nb_steps + 1, nb_outer_samples)
+    trajectory_samples[:, 1, :] .= init_state
+
+    @inbounds @views for t = 1:nb_steps
+        ibis_conditional_closedloop_sample!(
+            closedloop,
+            outer_param_samples,
+            view(trajectory_samples, :, t, :),
+            view(trajectory_samples, :, t+1, :)
+        )
+    end
+
+    # Compute the denominator of the integrand
+    scratch_matrix = zeros(xdim, nb_inner_samples + 1)
+    trajectory_logpdf = zeros(nb_inner_samples + 1, nb_outer_samples)
+    integrand = Vector{Float64}(undef, nb_outer_samples)
+
+    for n in 1:nb_outer_samples
+        regularizing_samples = hcat(
+            outer_param_samples[:, n],
+            reduce(hcat, inner_param_samples[:, n])
+        )
+        for t = 1:nb_steps
+            trajectory_logpdf[:, n] += ibis_conditional_dynamics_logpdf(
+                closedloop.dyn,
+                regularizing_samples,
+                trajectory_samples[1:xdim, t, n],        # state
+                trajectory_samples[xdim+1:end, t+1, n],  # action
+                trajectory_samples[1:xdim, t+1, n],      # next state
+                scratch_matrix
+            )
+        end
+        integrand[n] = (
+            trajectory_logpdf[1, n]
+            - logsumexp(trajectory_logpdf[:, n])
+            + log(nb_inner_samples + 1)
+        )
+    end
+    return mean(integrand)
+end
 
 
 function policy_gradient_objective(

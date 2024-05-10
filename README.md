@@ -1,6 +1,6 @@
 # InsideOutSMC2.jl
 
-This is the companion code for the paper [Nesting Particle Filters for Experimental Design in Dynamical Systems](https://arxiv.org/abs/2402.07868), written by [Sahel Iqbal](https://github.com/Sahel13) and [Hany Abdulsamad](https://github.com/hanyas). It implements Inside-Out SMC$^2$, a nested sequential Monte Carlo algorithm inspired by SMC$^2$ [2]. 
+This is the companion code for the paper [Nesting Particle Filters for Experimental Design in Dynamical Systems](https://arxiv.org/abs/2402.07868), written by [Sahel Iqbal](https://github.com/Sahel13) and [Hany Abdulsamad](https://github.com/hanyas). It implements $\textrm{Inside-Out SMC}^2$, a nested sequential Monte Carlo algorithm inspired by $\textrm{SMC}^2$ of Chopin et. al. 2013 [2]. 
 
 ## Installation
 [Julia](https://julialang.org/) needs to be installed. This has been tested with Julia v1.10. Clone the repo and move to this directory. From the Julia REPL, enter the following commands:
@@ -28,4 +28,5 @@ In our paper, we compare our method to *implicit Deep Adaptive Design* (iDAD) fr
 
 ## References
 1. Iqbal, S., Corenflos, A., Särkkä, S., and Abdulsamad, H. Nesting Particle Filters for Experimental Design in Dynamical Systems. In International Conference on Machine Learning. 2024.
-2. Chopin, N., Jacob, P. E., and Papaspiliopoulos, O. SMC$^2$: An efficient algorithm for sequential analysis of state space models. Journal of the Royal Statistical Society Series B: Statistical Methodology, 75(3):397–426, 2013.
+2. Chopin, N., Jacob, P. E., and Papaspiliopoulos, O. SMC^2: An efficient algorithm for sequential analysis of state space models. Journal of the Royal Statistical Society Series B: Statistical Methodology, 75(3):397–426, 2013.
+3. Ivanova, D. R., Foster, A., Kleinegesse, S., Gutmann, M., and Rainforth, T. Implicit deep adaptive design: Policy–based experimental design without likelihoods. In Advances in Neural Information Processing Systems. 2021.

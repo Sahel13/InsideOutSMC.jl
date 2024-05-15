@@ -20,7 +20,7 @@ In our paper, we compare our method to *implicit Deep Adaptive Design* (iDAD) fr
 ```
 @inproceedings{iqbal2024nesting,
   title = {Nesting Particle Filters for Experimental Design in Dynamical Systems},
-  author = {Sahel Iqbal and Adrien Corenflos and Simo Särkkä and Hany Abdulsamad},
+  author = {Sahel Iqbal and Adrien Corenflos and Simo S{\"a}rkk{\"a} and Hany Abdulsamad},
   booktitle = {International Conference on Machine Learning},
   year = {2024}
 }

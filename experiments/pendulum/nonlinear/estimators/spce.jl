@@ -25,15 +25,9 @@ using JLD2
 
 Random.seed!(1)
 
-_param_prior = MvNormal(
-    param_prior.mean,
-    param_prior.covar
-)
-
 policy = UniformStochasticPolicy([ctl_scale])
 # policy = PRBSStochasticPolicy([ctl_scale])
-# policy = load("./experiments/pendulum/linear/data/linear_pendulum_rb_csmc_ctl.jld2")["ctl"]
-# policy = load("./experiments/pendulum/linear/data/linear_pendulum_ibis_csmc_ctl.jld2")["ctl"]
+# policy = load("./experiments/pendulum/nonlinear/data/nonlinear_pendulum_ibis_csmc_ctl.jld2")["ctl"]
 
 closedloop = IBISClosedLoop(
     ibis_dynamics, policy
@@ -50,14 +44,14 @@ for k in 1:nb_runs
     Flux.reset!(closedloop.ctl)
     spce = compute_sPCE(
         closedloop,
-        _param_prior,
+        param_prior,
         init_state,
         nb_steps,
         nb_outer_samples,
         nb_inner_samples
     )
     their_estimator[k] = spce
-    @printf("iter: %i, Theirs: %0.4f\n", k, their_estimator[k])
+    @printf("iter: %i, sPCE: %0.4f\n", k, their_estimator[k])
 end
 
-@printf("Theirs: %0.4f ± %0.4f\n", mean(their_estimator), std(their_estimator))
+@printf("sPCE: %0.4f ± %0.4f\n", mean(their_estimator), std(their_estimator))

@@ -8,12 +8,12 @@ using StatsBase
 
 include("../environment.jl")
 
-using .CartpoleEnvironment: xdim, udim
-using .CartpoleEnvironment: init_state
-using .CartpoleEnvironment: ibis_dynamics
-using .CartpoleEnvironment: param_prior
-using .CartpoleEnvironment: param_proposal
-using .CartpoleEnvironment: ctl_shift, ctl_scale
+using .PendulumEnvironment: xdim, udim
+using .PendulumEnvironment: init_state
+using .PendulumEnvironment: ibis_dynamics
+using .PendulumEnvironment: param_prior
+using .PendulumEnvironment: param_proposal
+using .PendulumEnvironment: ctl_shift, ctl_scale
 
 using Printf: @printf
 
@@ -34,8 +34,8 @@ nb_ibis_moves = 3
 
 nb_policy_particles = 256
 action_penalty = 0.0
-slew_rate_penalty = 0.1
-tempering = 0.25
+slew_rate_penalty = 0.2
+tempering = 1.0
 
 policy_scratch = Array{Float64}(
     undef, xdim, nb_ibis_particles, nb_policy_particles
@@ -70,7 +70,7 @@ for k in 1:nb_runs
         nb_ibis_moves,
     )
     their_estimator[k] = spce
-    @printf("iter: %i, Theirs: %0.4f\n", k, their_estimator[k])
+    @printf("iter: %i, sPCE: %0.4f\n", k, their_estimator[k])
 end
 
-@printf("Theirs: %0.4f ± %0.4f\n", mean(their_estimator), std(their_estimator))
+@printf("sPCE: %0.4f ± %0.4f\n", mean(their_estimator), std(their_estimator))

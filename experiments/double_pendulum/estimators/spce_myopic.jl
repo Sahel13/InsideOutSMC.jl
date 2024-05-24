@@ -8,17 +8,17 @@ using StatsBase
 
 include("../environment.jl")
 
-using .CartpoleEnvironment: xdim, udim
-using .CartpoleEnvironment: init_state
-using .CartpoleEnvironment: ibis_dynamics
-using .CartpoleEnvironment: param_prior
-using .CartpoleEnvironment: param_proposal
-using .CartpoleEnvironment: ctl_shift, ctl_scale
+using .DoublePendulumEnvironment: xdim, udim
+using .DoublePendulumEnvironment: init_state
+using .DoublePendulumEnvironment: ibis_dynamics
+using .DoublePendulumEnvironment: param_prior
+using .DoublePendulumEnvironment: param_proposal
+using .DoublePendulumEnvironment: ctl_shift, ctl_scale
 
 using Printf: @printf
 
 
-prior_policy = UniformStochasticPolicy([ctl_scale])
+prior_policy = UniformStochasticPolicy(ctl_scale)
 policy_loop = IBISClosedLoop(
     ibis_dynamics, prior_policy
 )
@@ -26,9 +26,10 @@ policy_loop = IBISClosedLoop(
 nb_runs = 25
 
 nb_steps = 50
-nb_trajectories = 16
-nb_ibis_particles = 1024
+nb_outer_samples = 16
+nb_inner_samples = 1_000_000
 
+nb_ibis_particles = 1024
 nb_ibis_moves = 3
 
 nb_policy_particles = 256
@@ -53,22 +54,23 @@ adaptive_loop = IBISAdaptiveLoop(
     ibis_dynamics, myopic_policy
 )
 
-our_estimator = zeros(nb_runs)
+their_estimator = zeros(nb_runs)
 
 for k in 1:nb_runs
     Random.seed!(k)
-    state_struct, _ = myopic_smc_with_ibis_marginal_dynamics(
-        nb_steps,
-        nb_trajectories,
-        nb_ibis_particles,
-        init_state,
+    spce = compute_sPCE_for_myopic_adaptive_policy(
         adaptive_loop,
         param_prior,
+        init_state,
+        nb_steps,
+        nb_outer_samples,
+        nb_inner_samples,
+        nb_ibis_particles,
         param_proposal,
         nb_ibis_moves,
     )
-    our_estimator[k] = mean(state_struct.cumulative_return)
-    @printf("iter: %i, Ours: %0.4f\n", k, our_estimator[k])
+    their_estimator[k] = spce
+    @printf("iter: %i, sPCE: %0.4f\n", k, their_estimator[k])
 end
 
-@printf("Ours: %0.4f ± %0.4f\n", mean(our_estimator), std(our_estimator))
+@printf("sPCE: %0.4f ± %0.4f\n", mean(their_estimator), std(their_estimator))

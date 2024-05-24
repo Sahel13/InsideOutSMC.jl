@@ -11,23 +11,29 @@ using Printf: @printf
 
 include("../environment.jl")
 
-using .CartpoleEnvironment: xdim, udim
-using .CartpoleEnvironment: step_size
-using .CartpoleEnvironment: init_state
-using .CartpoleEnvironment: ibis_dynamics
-using .CartpoleEnvironment: param_prior
-using .CartpoleEnvironment: param_proposal
-using .CartpoleEnvironment: ctl_scale
-using .CartpoleEnvironment: ctl_feature_fn
+using .PendulumEnvironment: xdim, udim
+using .PendulumEnvironment: step_size
+using .PendulumEnvironment: init_state
+using .PendulumEnvironment: ibis_dynamics
+using .PendulumEnvironment: param_prior
+using .PendulumEnvironment: param_proposal
+using .PendulumEnvironment: ctl_scale
+using .PendulumEnvironment: ctl_feature_fn
 
 using JLD2
 
 
 Random.seed!(1)
 
+_param_prior = MvNormal(
+    param_prior.mean,
+    param_prior.covar
+)
+
 policy = UniformStochasticPolicy([ctl_scale])
 # policy = PRBSStochasticPolicy([ctl_scale])
-# policy = load("./experiments/cartpole/data/cartpole_ibis_csmc_ctl.jld2")["ctl"]
+# policy = load("./experiments/pendulum/linear/data/linear_pendulum_rb_csmc_ctl.jld2")["ctl"]
+# policy = load("./experiments/pendulum/linear/data/linear_pendulum_ibis_csmc_ctl.jld2")["ctl"]
 
 closedloop = IBISClosedLoop(
     ibis_dynamics, policy
@@ -55,7 +61,7 @@ for k in 1:nb_runs
         nb_particles,
         init_state,
         closedloop,
-        param_prior,
+        _param_prior,
         param_proposal,
         nb_ibis_moves,
         action_penalty,
@@ -63,7 +69,7 @@ for k in 1:nb_runs
         tempering,
     )
     our_estimator[k] = mean(state_struct.cumulative_return)
-    @printf("iter: %i, Ours: %0.4f\n", k, our_estimator[k])
+    @printf("iter: %i, EIG Estimate: %0.4f\n", k, our_estimator[k])
 end
 
-@printf("Ours: %0.4f ± %0.4f\n", mean(our_estimator), std(our_estimator))
+@printf("EIG Estimate: %0.4f ± %0.4f\n", mean(our_estimator), std(our_estimator))

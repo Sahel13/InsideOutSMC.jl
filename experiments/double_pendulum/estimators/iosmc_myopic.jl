@@ -70,7 +70,7 @@ for k in 1:nb_runs
         nb_ibis_moves,
     )
     our_estimator[k] = mean(state_struct.cumulative_return)
-    @printf("iter: %i, Ours: %0.4f\n", k, our_estimator[k])
+    @printf("iter: %i, EIG Estimate: %0.4f\n", k, our_estimator[k])
 end
 
-@printf("Ours: %0.4f ± %0.4f\n", mean(our_estimator), std(our_estimator))
+@printf("EIG Estimate: %0.4f ± %0.4f\n", mean(our_estimator), std(our_estimator))

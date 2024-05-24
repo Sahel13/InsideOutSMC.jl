@@ -2,9 +2,8 @@ using InsideOutSMC
 
 using Random
 using Distributions
-using Statistics
 using LinearAlgebra
-using LogExpFunctions
+using StatsBase
 
 import Flux
 
@@ -21,12 +20,8 @@ using .DoublePendulumEnvironment: param_proposal
 using .DoublePendulumEnvironment: ctl_scale
 using .DoublePendulumEnvironment: ctl_feature_fn
 
-using InsideOutSMC: compute_sPCE
-
 using JLD2
 
-
-Random.seed!(1)
 
 policy = UniformStochasticPolicy(ctl_scale)
 # policy = PRBSStochasticPolicy(ctl_scale)
@@ -39,23 +34,34 @@ closedloop = IBISClosedLoop(
 nb_runs = 25
 
 nb_steps = 50
-nb_outer_samples = 16
-nb_inner_samples = 1_000_000
+nb_trajectories = 16
+nb_particles = 1024
 
-their_estimator = zeros(nb_runs)
+nb_ibis_moves = 3
+
+action_penalty = 0.0
+slew_rate_penalty = 0.0
+tempering = 0.0
+
+our_estimator = zeros(nb_runs)
 
 for k in 1:nb_runs
     Flux.reset!(closedloop.ctl)
-    spce = compute_sPCE(
+    state_struct, _ = smc_with_ibis_marginal_dynamics(
+        nb_steps,
+        nb_trajectories,
+        nb_particles,
+        init_state,
         closedloop,
         param_prior,
-        init_state,
-        nb_steps,
-        nb_outer_samples,
-        nb_inner_samples
+        param_proposal,
+        nb_ibis_moves,
+        action_penalty,
+        slew_rate_penalty,
+        tempering,
     )
-    their_estimator[k] = spce
-    @printf("iter: %i, Theirs: %0.4f\n", k, their_estimator[k])
+    our_estimator[k] = mean(state_struct.cumulative_return)
+    @printf("iter: %i, EIG Estimate: %0.4f\n", k, our_estimator[k])
 end
 
-@printf("Theirs: %0.4f ± %0.4f\n", mean(their_estimator), std(their_estimator))
+@printf("EIG Estimate: %0.4f ± %0.4f\n", mean(our_estimator), std(our_estimator))

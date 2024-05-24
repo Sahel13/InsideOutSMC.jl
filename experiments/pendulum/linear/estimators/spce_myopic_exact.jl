@@ -58,7 +58,7 @@ for k in 1:nb_runs
         nb_inner_samples,
     )
     their_estimator[k] = spce
-    @printf("iter: %i, Theirs: %0.4f\n", k, their_estimator[k])
+    @printf("iter: %i, sPCE: %0.4f\n", k, their_estimator[k])
 end
 
-@printf("Theirs: %0.4f ± %0.4f\n", mean(their_estimator), std(their_estimator))
+@printf("sPCE: %0.4f ± %0.4f\n", mean(their_estimator), std(their_estimator))

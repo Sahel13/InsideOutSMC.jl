@@ -1,4 +1,4 @@
-# InsideOutSMC2.jl
+# InsideOutSMC.jl
 
 This is the companion code for the paper [Nesting Particle Filters for Experimental Design in Dynamical Systems](https://arxiv.org/abs/2402.07868), written by [Sahel Iqbal](https://github.com/Sahel13) and [Hany Abdulsamad](https://github.com/hanyas). It implements $\textrm{Inside-Out SMC}^2$, a nested sequential Monte Carlo algorithm inspired by $\textrm{SMC}^2$ of Chopin et. al. 2013 [1]. 
 
